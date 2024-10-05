@@ -14,6 +14,7 @@ dist-ssr
 .env
 imageMap.json
 haiku.txt
+._haiku.txt
 
 # Editor directories and files
 .vscode/*
