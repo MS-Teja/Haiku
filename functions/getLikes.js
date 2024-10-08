@@ -2,13 +2,12 @@ const { initializeApp } = require('firebase/app');
 const { getFirestore, collection, getDocs } = require('firebase/firestore');
 
 const firebaseConfig = {
-  // Your Firebase configuration here
-  apiKey: "AIzaSyDDUmKD_Dw9wehZaH_CifLnaDRnlTMysxc",
-  authDomain: "haiku-book.firebaseapp.com",
-  projectId: "haiku-book",
-  storageBucket: "haiku-book.appspot.com",
-  messagingSenderId: "474204673410",
-  appId: "1:474204673410:web:0214a624a7d0ff38846b9b"
+  apiKey: process.env.VUE_APP_FIREBASE_API_KEY,
+  authDomain: process.env.VUE_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.VUE_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.VUE_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.VUE_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.VUE_APP_FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);

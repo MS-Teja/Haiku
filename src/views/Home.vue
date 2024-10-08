@@ -1,36 +1,36 @@
 <template>
   <div class="home">
-    <h1 class="title">Haiku Harmony</h1>
     <p class="theme">Today's Theme is Cherry blossoms</p>
     <div v-if="loading" class="loading">Loading haikus...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
+    <div v-else-if="sortedHaikus.length === 0" class="no-haikus">No haikus found.</div>
     <div v-else class="haiku-grid">
       <div v-for="haiku in sortedHaikus" :key="haiku.id" class="haiku-card">
         <div class="haiku-image-container">
           <img
-            :src="`https://${pinataGateway}/ipfs/${haiku.imageHash}`"
-            alt="Haiku Background"
-            @error="imageError(haiku.id)"
+            :src="getImageSrc(haiku.image)"
+            :alt="haiku.text"
+            @error="() => imageError(haiku.id)"
+            v-if="!haiku.imageError"
           >
-          <div v-if="haiku.imageError" class="image-error">Failed to load image</div>
+          <div v-else class="image-error">Failed to load image</div>
           <div class="haiku-text-overlay">
             <p v-for="(line, index) in haiku.text.split('\n')" :key="index">{{ line }}</p>
           </div>
         </div>
         <div class="haiku-footer">
-          <span class="author">{{ haiku.author || 'Anonymous' }}</span>
+          <div class="author">
+            <img :src="haiku.photoURL" :alt="haiku.displayName" class="author-avatar" @error="() => authorImageError(haiku.id)">
+            <span>{{ haiku.displayName || 'Anonymous' }}</span>
+          </div>
+          <div class="tags">
+            <span v-for="tag in haiku.tags" :key="tag" class="tag">{{ tag }}</span>
+          </div>
           <div class="haiku-actions">
             <button class="like-btn" @click="likeHaiku(haiku.id)" :class="{ liked: haiku.liked }">
-              <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" :fill="haiku.liked ? '#ff4081' : '#e8eaed'">
-                <path d="m480-120-58-52q-101-91-167-157T150-447.5Q111-500 95.5-544T80-634q0-94 63-157t157-63q52 0 99 22t81 62q34-40 81-62t99-22q94 0 157 63t63 157q0 46-15.5 90T810-447.5Q771-395 705-329T538-172l-58 52Zm0-108q96-86 158-147.5t98-107q36-45.5 50-81t14-70.5q0-60-40-100t-100-40q-47 0-87 26.5T518-680h-76q-15-41-55-67.5T300-774q-60 0-100 40t-40 100q0 35 14 70.5t50 81q36 45.5 98 107T480-228Zm0-273Z"/>
-              </svg>
-              {{ haiku.likes }}
+              ❤️ {{ haiku.likes }}
             </button>
-            <button class="share-btn" @click="shareHaiku(haiku)">
-              <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e8eaed">
-                <path d="M680-80q-50 0-85-35t-35-85q0-6 3-28L282-392q-16 15-37 23.5t-45 8.5q-50 0-85-35t-35-85q0-50 35-85t85-35q24 0 45 8.5t37 23.5l281-164q-2-7-2.5-13.5T560-760q0-50 35-85t85-35q50 0 85 35t35 85q0 50-35 85t-85 35q-24 0-45-8.5T598-672L317-508q2 7 2.5 13.5t.5 14.5q0 8-.5 14.5T317-452l281 164q16-15 37-23.5t45-8.5q50 0 85 35t35 85q0 50-35 85t-85 35Zm0-80q17 0 28.5-11.5T720-200q0-17-11.5-28.5T680-240q-17 0-28.5 11.5T640-200q0 17 11.5 28.5T680-160ZM200-440q17 0 28.5-11.5T240-480q0-17-11.5-28.5T200-520q-17 0-28.5 11.5T160-480q0 17 11.5 28.5T200-440Zm480-280q17 0 28.5-11.5T720-760q0-17-11.5-28.5T680-800q-17 0-28.5 11.5T640-760q0 17 11.5 28.5T680-720Zm0 520ZM200-480Zm480-280Z"/>
-              </svg>
-            </button>
+            <button class="share-btn" @click="shareHaiku(haiku)">🔗</button>
           </div>
         </div>
       </div>
@@ -39,9 +39,7 @@
 </template>
 
 <script>
-import { ref, computed } from 'vue';
-import { db } from '../services/firebase';
-import { doc, updateDoc, increment } from 'firebase/firestore';
+import { ref, computed, onMounted } from 'vue';
 
 export default {
   setup() {
@@ -56,31 +54,38 @@ export default {
 
     const fetchHaikusAndLikes = async () => {
       try {
-        const [haikuResponse, likesResponse] = await Promise.all([
-          fetch('/.netlify/functions/fetchHaikus'),
-          fetch('/.netlify/functions/getLikes')
-        ]);
+        const response = await fetch('/.netlify/functions/fetchHaikus');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('Fetched data:', data);
 
-        if (!haikuResponse.ok || !likesResponse.ok) {
-          throw new Error('Failed to fetch data');
+        if (!data.haikus || !Array.isArray(data.haikus)) {
+          throw new Error('Invalid haiku data received');
         }
 
-        const haikuData = await haikuResponse.json();
-        const likesData = await likesResponse.json();
-
-        haikus.value = haikuData.haikus.map(haiku => ({
+        haikus.value = data.haikus.map(haiku => ({
           ...haiku,
-          likes: likesData.likes[haiku.id] || 0,
-          liked: false
+          liked: false,
+          imageError: false,
+          authorImageError: false
         }));
 
-        pinataGateway.value = haikuData.pinataGateway;
+        pinataGateway.value = data.pinataGateway;
+        
+        console.log('Processed haikus:', haikus.value);
       } catch (err) {
         console.error("Error fetching data:", err);
-        error.value = "Failed to load haikus. Please try again later.";
+        error.value = `Failed to load haikus: ${err.message}`;
       } finally {
         loading.value = false;
       }
+    };
+
+    const getImageSrc = (imageHash) => {
+      return `https://${pinataGateway.value}/ipfs/${imageHash}`;
     };
 
     const imageError = (id) => {
@@ -90,62 +95,79 @@ export default {
       }
     };
 
+    const authorImageError = (id) => {
+      const haiku = haikus.value.find(h => h.id === id);
+      if (haiku) {
+        haiku.authorImageError = true;
+      }
+    };
+
     const likeHaiku = async (id) => {
-      try {
-        const haiku = haikus.value.find(h => h.id === id);
-        if (haiku.liked) return;
-
-        const likesRef = doc(db, 'likes', id);
-        await updateDoc(likesRef, {
-          count: increment(1)
-        });
-
-        haiku.likes++;
-        haiku.liked = true;
-      } catch (error) {
-        console.error('Error liking haiku:', error);
-        alert('Failed to like haiku. Please try again.');
-      }
+      // Implement like functionality
+      console.log('Liking haiku:', id);
     };
 
-    const shareHaiku = async (haiku) => {
-      const shareUrl = `${window.location.origin}/haiku/${haiku.id}`;
-      
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: 'Check out this haiku!',
-            text: haiku.text,
-            url: shareUrl,
-          });
-          alert('Haiku shared successfully!');
-        } catch (error) {
-          console.error('Error sharing haiku:', error);
-          fallbackShare(shareUrl);
-        }
-      } else {
-        fallbackShare(shareUrl);
-      }
+    const shareHaiku = (haiku) => {
+      // Implement share functionality
+      console.log('Sharing haiku:', haiku.id);
     };
 
-    const fallbackShare = async (url) => {
-      try {
-        await navigator.clipboard.writeText(url);
-        alert('Haiku link copied to clipboard!');
-      } catch (error) {
-        console.error('Error copying to clipboard:', error);
-        alert('Failed to copy link. Please try again.');
-      }
+    onMounted(fetchHaikusAndLikes);
+
+    return { 
+      sortedHaikus, 
+      pinataGateway, 
+      loading, 
+      error,
+      getImageSrc,
+      imageError,
+      authorImageError,
+      likeHaiku,
+      shareHaiku
     };
-
-    fetchHaikusAndLikes();
-
-    return { sortedHaikus, pinataGateway, loading, error, imageError, likeHaiku, shareHaiku };
   }
 }
 </script>
 
 <style scoped>
+/* Add or update your styles here */
+.author-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  margin-right: 10px;
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+.tag {
+  background-color: #f0f0f0;
+  padding: 2px 5px;
+  border-radius: 3px;
+  margin-right: 5px;
+  font-size: 0.8em;
+}
+
+.author-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  margin-right: 10px;
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+.tag {
+  background-color: #f0f0f0;
+  padding: 2px 5px;
+  border-radius: 3px;
+  margin-right: 5px;
+  font-size: 0.8em;
+}
 
 .like-btn.liked {
   color: #ff4081;

@@ -5,14 +5,15 @@
         <router-link to="/" class="nav-logo">Haiku Harmony</router-link>
       </div>
       <div class="navbar-center">
-        <router-link to="/" class="nav-link">Hall Of Fame</router-link>
+        <router-link to="/hall-of-fame" class="nav-link">Hall Of Fame</router-link>
         <router-link to="/submit" class="nav-link">Create a Haiku</router-link>
         <router-link to="/about" class="nav-link">About</router-link>
       </div>
       <div class="navbar-right">
         <template v-if="user">
           <div class="account-dropdown" @click="toggleDropdown">
-            <span class="account-icon">👤</span>
+            <ProfileImage v-if="user.photoURL" :src="user.photoURL" />
+            <span v-else class="account-icon">👤</span>
             <div v-if="showDropdown" class="dropdown-content">
               <span>{{ user.displayName || user.email }}</span>
               <a href="#" @click.prevent="logout">Logout</a>
@@ -27,6 +28,7 @@
     <router-view></router-view>
   </div>
 </template>
+
 <script>
 import { ref, onMounted } from 'vue';
 import { auth } from './services/firebase';
@@ -63,7 +65,15 @@ export default {
   }
 }
 </script>
+
 <style scoped>
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .navbar {
   display: flex;
   justify-content: space-between;

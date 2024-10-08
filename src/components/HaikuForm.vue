@@ -16,6 +16,7 @@
         <option value="7">Subtle Blossom Petals in the Breeze</option>
         <option value="8">Soft Rain Falling Over a Quiet Garden</option>
       </select>
+      <input v-model="tags" placeholder="Tags (comma-separated)" required>
       <button type="submit" class="submit-btn" :disabled="!isFormValid">Submit Haiku</button>
     </form>
     <p v-if="message" :class="{ 'success': isSuccess, 'error': !isSuccess }">
@@ -26,6 +27,7 @@
 
 <script>
 import { ref, computed } from 'vue';
+import { useUserStore } from '../stores/user';
 
 export default {
   setup() {
@@ -33,26 +35,32 @@ export default {
     const line2 = ref('');
     const line3 = ref('');
     const selectedImageId = ref('');
+    const tags = ref('');
     const message = ref('');
     const isSuccess = ref(false);
+    const userStore = useUserStore();
 
     const isFormValid = computed(() => {
-      return line1.value.trim() && line2.value.trim() && line3.value.trim() && selectedImageId.value;
+      return line1.value.trim() && line2.value.trim() && line3.value.trim() && selectedImageId.value && tags.value.trim();
     });
 
     const submitHaiku = async () => {
-      try {
-        const haikuText = `${line1.value}\n${line2.value}\n${line3.value}`;
-        const response = await fetch('/.netlify/functions/uploadToPinata', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            text: haikuText,
-            imageId: selectedImageId.value
-          }),
-        });
+    try {
+      const haikuText = `${line1.value}\n${line2.value}\n${line3.value}`;
+      const response = await fetch('/.netlify/functions/uploadToPinata', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: haikuText,
+          selectedImage: selectedImageId.value,
+          userId: userStore.user.uid,
+          displayName: userStore.user.displayName,
+          photoURL: userStore.user.photoURL,
+          tags: tags.value.split(',').map(tag => tag.trim())
+        }),
+      });;
 
         if (!response.ok) {
           throw new Error('Failed to submit haiku');
@@ -66,6 +74,7 @@ export default {
         line2.value = '';
         line3.value = '';
         selectedImageId.value = '';
+        tags.value = '';
 
         message.value = 'Haiku submitted successfully!';
         isSuccess.value = true;
@@ -79,8 +88,8 @@ export default {
       }
     };
 
-    return { 
-      line1, line2, line3, selectedImageId, submitHaiku, isFormValid, message, isSuccess 
+    return {
+      line1, line2, line3, selectedImageId, tags, submitHaiku, isFormValid, message, isSuccess
     };
   }
 }

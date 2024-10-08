@@ -1,8 +1,5 @@
 const pinataSDK = require('@pinata/sdk');
-const axios = require('axios');
-
 const pinata = new pinataSDK({ pinataJWTKey: process.env.PINATA_JWT });
-const IMAGE_MAP_CID = 'QmbVtDZJJrKyFAtGRzJPXayDkVecayQCKq8QCMeEghP6vZ'; // CID of your imageMap.json
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -10,42 +7,41 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { text, imageId } = JSON.parse(event.body);
+    const { text, selectedImage, userId, displayName, photoURL, tags } = JSON.parse(event.body);
 
-    if (!text || !imageId) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Missing text or imageId' }) };
-    }
+    console.log('Uploading haiku:', { text, userId, displayName, tags });
 
-    // Fetch the image map
-    const imageMapResponse = await axios.get(`https://${process.env.PINATA_GATEWAY}/ipfs/${IMAGE_MAP_CID}`);
-    const imageMap = imageMapResponse.data;
-
-    if (!imageMap[imageId]) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid imageId' }) };
-    }
-
-    // Create and upload haiku metadata
-    const haikuMetadata = {
-      text: text,
-      imageHash: imageMap[imageId],
-      timestamp: new Date().toISOString()
+    const haikuData = {
+      text,
+      image: selectedImage, // This will be the base64 encoded image or the image identifier
+      timestamp: Date.now(),
+      userId,
+      displayName,
+      photoURL,
+      tags: tags.join(','),
+      likes: 0
     };
 
-    const jsonUploadResponse = await pinata.pinJSONToIPFS(haikuMetadata, {
-      pinataMetadata: { name: 'haiku_metadata.json' }
-    });
+    const pinataOptions = {
+      pinataMetadata: {
+        name: 'haiku_metadata.json'
+      }
+    };
+
+    const result = await pinata.pinJSONToIPFS(haikuData, pinataOptions);
+
+    console.log('Pinata upload result:', result);
 
     return {
       statusCode: 200,
       body: JSON.stringify({
         success: true,
-        haikuHash: jsonUploadResponse.IpfsHash,
-        imageHash: imageMap[imageId]
+        pinataUrl: `https://gateway.pinata.cloud/ipfs/${result.IpfsHash}`,
+        message: "Haiku uploaded successfully"
       })
     };
-
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error uploading haiku:', error);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: 'Failed to upload haiku', details: error.message })

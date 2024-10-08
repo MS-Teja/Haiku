@@ -6,7 +6,7 @@
       <div v-for="haiku in haikus" :key="haiku.id" class="haiku-card">
         <div class="haiku-image-container">
           <img
-            :src="`https://${pinataGateway}/ipfs/${haiku.imageHash}`"
+            :src="`https://${pinataGateway}/ipfs/${haiku.image}`"
             :alt="haiku.text"
             @error="imageError(haiku.id)"
           >
@@ -16,9 +16,16 @@
           </div>
         </div>
         <div class="haiku-footer">
-          <span class="author">{{ haiku.author || 'Anonymous' }}</span>
+          <div class="author">
+            <ProfileImage :src="haiku.photoURL" :alt-text="`${haiku.displayName}'s profile`" />
+            <!-- <img v-if="haiku.photoURL" :src="haiku.photoURL" alt="Author" class="author-avatar"> -->
+            <span>{{ haiku.displayName || 'Anonymous' }}</span>
+          </div>
+          <div class="tags">
+            <span v-for="tag in haiku.tags" :key="tag" class="tag">{{ tag }}</span>
+          </div>
           <div class="haiku-actions">
-            <button class="like-btn" @click="likeHaiku(haiku.id)">❤️ {{ haiku.likes || 0 }}</button>
+            <button class="like-btn" @click="likeHaiku(haiku.id)">❤️ {{ haiku.likes }}</button>
             <button class="share-btn" @click="shareHaiku(haiku)">🔗</button>
           </div>
         </div>
@@ -29,8 +36,6 @@
 
 <script>
 import { ref, onMounted } from 'vue';
-import { db } from '../services/firebase';
-import { doc, updateDoc, increment } from 'firebase/firestore';
 
 export default {
   setup() {
@@ -39,26 +44,18 @@ export default {
     const loading = ref(true);
     const error = ref(null);
 
-    const fetchHaikusAndLikes = async () => {
+    const fetchHaikus = async () => {
       try {
-        const [haikuResponse, likesResponse] = await Promise.all([
-          fetch('/.netlify/functions/fetchHaikus'),
-          fetch('/.netlify/functions/getLikes')
-        ]);
+        const response = await fetch('/.netlify/functions/fetchHaikus');
 
-        if (!haikuResponse.ok || !likesResponse.ok) {
+        if (!response.ok) {
           throw new Error('Failed to fetch data');
         }
 
-        const haikuData = await haikuResponse.json();
-        const likesData = await likesResponse.json();
+        const data = await response.json();
 
-        haikus.value = haikuData.haikus.map(haiku => ({
-          ...haiku,
-          likes: likesData.likes[haiku.id] || 0
-        }));
-
-        pinataGateway.value = haikuData.pinataGateway;
+        haikus.value = data.haikus;
+        pinataGateway.value = data.pinataGateway;
       } catch (err) {
         console.error("Error fetching data:", err);
         error.value = "Failed to load haikus. Please try again later.";
@@ -76,14 +73,22 @@ export default {
 
     const likeHaiku = async (id) => {
       try {
-        const likesRef = doc(db, 'likes', id);
-        await updateDoc(likesRef, {
-          count: increment(1)
+        const response = await fetch('/.netlify/functions/likeHaiku', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ id }),
         });
 
+        if (!response.ok) {
+          throw new Error('Failed to like haiku');
+        }
+
+        const result = await response.json();
         const haiku = haikus.value.find(h => h.id === id);
         if (haiku) {
-          haiku.likes++;
+          haiku.likes = result.likes;
         }
       } catch (error) {
         console.error('Error liking haiku:', error);
@@ -99,15 +104,29 @@ export default {
       // ... (fallbackShare function remains the same) ...
     };
 
-    onMounted(fetchHaikusAndLikes);
+    onMounted(fetchHaikus);
 
     return { haikus, pinataGateway, loading, error, imageError, likeHaiku, shareHaiku };
   }
 }
 </script>
 
-
 <style scoped>
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.tag {
+  background-color: #e0e0e0;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 0.8em;
+  color: #333;
+}
+
 .haiku-list {
   max-width: 1200px;
   margin: 0 auto;

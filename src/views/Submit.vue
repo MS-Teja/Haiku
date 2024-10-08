@@ -1,6 +1,6 @@
 <template>
     <div>
-      <h2>Submit a Haiku</h2>
+      <!-- <h2>Submit a Haiku</h2> -->
       <HaikuForm v-if="isAuthenticated" />
       <div v-else>
         <p>Please log in to submit a haiku.</p>
